@@ -1,13 +1,7 @@
 library(statRdaysCFB)
 library(data.table)
-library(tidyverse)
 library(gt)
-
-# Set WD and create a folder to hold any plots made today
-setwd("C:/Users/Kyle/Documents/Projects/Data Projects/Indycar")
-lubridate::today()
-PLOT_SAVE_PATH <- paste0(getwd(), "/plots/", lubridate::today())
-dir.create(PLOT_SAVE_PATH)
+library(tidyverse)
 
 colors <- function(team){
   reference <- list(
@@ -19,12 +13,24 @@ colors <- function(team){
   return(reference[team] %>% as.character())
 }
 
+RACE_PACE <- 1.07
+path <- "C:/Users/Kyle/Downloads/Honda Indy Toronto(Streets of Toronto)-Race_(R.I)_2023-07-16/Honda Indy Toronto-Race_R_2023-07-16.csv"
+
+
+# Functions ---------------------------------------------------------------
+
+pick_fastest <- function(df, drivers=unique(df$driver_name)){
+  return(df %>% 
+    filter(driver_name %in% drivers) %>% 
+    group_by(driver_name) %>% 
+    slice_min(lap_time))
+}
 
 # Load Data ---------------------------------------------------------------
 
-path <- "C:/Users/Kyle/Downloads/Honda Indy 200 at Mid-Ohio(Mid-Ohio Sports Car Course)-Race_(R.I)_2023-07-02/Honda Indy 200 at Mid-Ohio-Race_R_2023-07-02.csv"
-
 df <- fread(path)
+
+df <- as_tibble(df)
 
 
 # Preprocess --------------------------------------------------------------
@@ -34,6 +40,73 @@ colnames(df) <- janitor::make_clean_names(colnames(df))
 options(digits.secs=4)
 df <- df %>% 
   mutate(tod = strptime(tod, format="%H:%M:%OS"))
+
+## Calc TOD at each sector to calc car ahead regardless of lap
+sectors <- df %>% 
+  group_by(driver_name) %>% 
+  mutate(lap_start_tod = lag(tod, n=1L, order_by=lap)) %>% 
+  mutate(lap_start_tod = if_else(
+    lap == 1,
+    tod - lap_time,
+    lap_start_tod)) %>%  # first lap start time is calculated by subtracting lap 1 lap time from lap 1 finish TOD
+  pivot_longer(cols = matches("s[0-9]+"), names_to = "sector", values_to = "sector_time")
+
+# NA missing sector times
+sectors <- sectors %>% 
+  group_by(driver_name, lap) %>% 
+  mutate(missing_sectors = sum(sector_time == 0)) %>%
+  mutate(sector_time = if_else(
+    sector_time == 0 & missing_sectors > 0,
+    NA, # divide missing time evenly among the sectors
+    sector_time
+  ))
+
+# NOTE: lap 1 sector times are the sum of the lap number
+# So prev lap tod + current lap sector times == current lap tod
+# Calc cumsum sector time
+sectors <- sectors %>% 
+  group_by(driver_name, lap) %>% 
+  mutate(cum_sector_time = cumsum(sector_time))
+
+# Calc sector TOD
+sectors <- sectors %>% 
+  mutate(sector_complete_tod = lap_start_tod + cum_sector_time)
+
+# Group by sector and order by TOD to calc car ahead at that sector.
+# Don't calculate car ahead for sector if you didn't pass through that sector.
+sectors <- sectors %>%
+  group_by(sector) %>%
+  mutate(
+    car_ahead_s = if_else(
+      is.na(sector_complete_tod),
+      NA,
+      lag(sector_complete_tod, n = 1L, order_by = sector_complete_tod) - sector_complete_tod
+    ),
+    driver_ahead = if_else(
+      is.na(sector_complete_tod),
+      NA,
+      lag(driver_name, n = 1L, order_by = sector_complete_tod)
+    )
+  )
+
+# This should be running order instead of position
+sectors %>% 
+  arrange(sector, sector_complete_tod)
+
+# TODO: Create mini-laps and get running order for all non-NA mini-laps, then calc overtakes
+
+# Pivot back
+df_cum <- sectors %>% 
+  pivot_wider(id_cols = c(driver_name, lap),
+              names_from = sector,
+              values_from = cum_sector_time,
+              names_glue = "{sector}_cum")
+
+
+# NOTE: Last sector is the s/f line, so cum sum time equals full lap time
+# Join back
+df <- df %>% 
+  left_join(df_cum, by = c("driver_name", "lap"))
 
 # calc position at end of lap
 df <- df %>% 
@@ -91,6 +164,7 @@ df <- df %>%
 # Stuck in traffic is following close and not improving position over multiple corners
 # You are going slower than you'd like, evidenced by the fact that when you finally do pass
 # you pull away from the car behind
+# TODO: Calc using sectors, not laps, then apply to full lap.
 df <- df %>% 
   group_by(driver_name) %>% 
   mutate(
@@ -111,6 +185,7 @@ df <- df %>%
     ))
 
 # Number of passes made
+# TODO: Calc at sector level.
 df <- df %>% 
   group_by(driver_name) %>% 
   mutate(pos_gained = lag(pos, n = 1L, order_by = lap) - pos,
@@ -129,6 +204,11 @@ field_green_lap_time <- df %>%
 
 # Analysis ----------------------------------------------------------------
 
+# create a folder to hold any plots made today
+lubridate::today()
+PLOT_SAVE_PATH <- paste0(getwd(), "/plots/", lubridate::today())
+dir.create(PLOT_SAVE_PATH)
+
 # Green Flag Lap Times by number of stops
 df %>% 
   filter(is_yellow == 0
@@ -136,20 +216,25 @@ df %>%
          & lap_time <= (1.5 * min(lap_time))) %>% 
   group_by(driver_name) %>% 
   mutate(total_stops = max(n_stops)) %>% 
+  filter(total_stops != 0) %>% 
   group_by(total_stops) %>% 
   summarise(avg_lap_time = mean(lap_time), std_dev_lap_time = sd(lap_time)) %>% 
   gt() %>% 
   fmt_auto() %>% 
   tab_header(title = "Green Flag Lap Times", subtitle = "By Strategy") %>% 
   cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
+  data_color(columns = c(avg_lap_time, std_dev_lap_time), palette = "viridis") %>% 
   gt::gtsave(filename="green_flag_laptimes.png", path = PLOT_SAVE_PATH)
 
 # For leaders
+top_3 <- df %>% 
+  filter(lap == max(lap) & pos <= 3) %>% pull(driver_name)
+
 df %>% 
   filter(is_yellow == 0
          & ! status_desc %in% c("Pit In", "Pit Out")
          & lap_time <= (1.5 * min(lap_time))
-         & driver_name %in% c("O'Ward", "Dixon", "Palou")) %>%
+         & driver_name %in% top_3) %>%
   group_by(driver_name) %>% 
   summarise(avg_lap_time = mean(lap_time), std_dev_lap_time = sd(lap_time)) %>% 
   gt() %>% 
@@ -162,7 +247,7 @@ df %>%
   filter(is_yellow == 0
          & ! status_desc %in% c("Pit In", "Pit Out")
          & lap_time <= (1.5 * min(lap_time))
-         & driver_name %in% c("O'Ward", "Dixon", "Palou")) %>%
+         & driver_name %in% top_3) %>%
   ggplot(aes(x=lap, y=lap_time, color=driver_name)) +
   geom_line(size=2,alpha=.5) +
   staturdays_theme +
@@ -174,6 +259,7 @@ ggsave(filename = "green_laptime_plot_leaders.png", path = PLOT_SAVE_PATH,
        width = 1600, height = 900, units = "px", dpi = 300)
   
 # O'Ward's Pit Delta
+# TODO: Generalize (make a function)
 oward_green_lap_time <- df %>% 
   filter(is_yellow == 0
          & ! status_desc %in% c("Pit In", "Pit Out")
@@ -197,6 +283,7 @@ df %>%
   
 
 # n overtakes
+# TODO: Do at sector level too
 df %>% 
   summarise(total_overtakes = sum(overtakes, na.rm=TRUE)) %>% 
   arrange(desc(total_overtakes)) %>% 
@@ -206,6 +293,16 @@ df %>%
   cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
   fmt_auto() %>% 
   gtsave(filename="most_overtakes.png", path = PLOT_SAVE_PATH)
+
+df %>% 
+  summarise(total_overtakes = sum(overtakes, na.rm=TRUE)) %>% 
+  arrange(desc(total_overtakes)) %>% 
+  tail(10) %>% 
+  gt() %>% 
+  tab_header(title = "Overtakes for Position", subtitle = "Bottom 10 Overtakers") %>% 
+  cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
+  fmt_auto() %>% 
+  gtsave(filename="least_overtakes.png", path = PLOT_SAVE_PATH)
 
 # Tire age
 df %>% 
@@ -223,6 +320,7 @@ df %>%
 ggsave(filename = "tire_dropoff.png", path = PLOT_SAVE_PATH,
        width = 1600, height = 900, units = "px", dpi = 300)
 
+# TODO: Generalize
 df %>% filter(
   driver_name == "O'Ward"
 ) %>% 
@@ -234,7 +332,90 @@ df %>% filter(
   cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
   fmt_auto() %>% 
   gtsave(filename="oward_tire_stints.png", path = PLOT_SAVE_PATH)
+
+# Fastest laps overall
+df %>% 
+  ungroup() %>% 
+  slice_min(lap_time, n = 10) %>% 
+  select(driver_name, lap, lap_time) %>% 
+  gt() %>% 
+  tab_header(title = "Fastest Laps Overall") %>% 
+  cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
+  fmt_auto() %>% 
+  data_color(columns = c(lap_time), palette = "viridis", reverse = TRUE) %>% 
+  gtsave(filename="fastest_laps.png", path = PLOT_SAVE_PATH)
+
+# By driver
+df %>% 
+  group_by(driver_name) %>% 
+  slice_min(lap_time) %>% 
+  select(driver_name, lap, lap_time) %>% 
+  arrange(lap_time) %>% 
+  ungroup() %>% 
+  gt() %>% 
+  tab_header(title = "Fastest Lap by Driver") %>% 
+  cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
+  fmt_auto() %>% 
+  data_color(columns = c(lap_time), palette = "viridis", reverse = TRUE) %>% 
+  gtsave(filename="fastest_laps_driver.png", path = PLOT_SAVE_PATH)
+
+df %>% 
+  filter(lap_time < RACE_PACE * min(lap_time)) %>% 
+  ggplot(aes(x = lap_time, y = driver_name)) +
+  geom_boxplot()
   
+## Sector Analysis
+# Who was chasing who at the end of the race?
+sectors %>% group_by(driver_name, driver_ahead) %>% 
+  filter(lap >= 60, car_ahead_s > -1) %>% 
+  summarise(n = n()) %>% 
+  group_by(driver_name) %>% 
+  slice_max(n) %>% 
+  arrange(desc(n)) %>% 
+  ungroup() %>% 
+  gt() %>% 
+  fmt_auto() %>% 
+  cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>% 
+  data_color(columns = where(~is.numeric(.x)), palette = "viridis") %>% 
+  tab_header(title = "Following Closely", subtitle = "Sectors within 1 second of car ahead") %>% 
+  tab_footnote("Lap 60+")
+
+# TODO: Number of overtakes and being overtaken, and net overtakes
+  
+
+# Sector heatmap
+quickest_lap <- df %>% 
+  pick_fastest() %>% 
+  ungroup() %>% 
+  filter(lap_time < RACE_PACE * min(lap_time)) %>% 
+  select(driver_name, matches("s[0-9]+")) %>% 
+  select(!matches("cum")) %>% 
+  pivot_longer(cols = !driver_name, names_to = "sector", values_to = "time") %>% 
+  group_by(sector) %>% 
+  mutate(pct = round((time - min(time))/min(time), 4),
+         time_lost = round(time - min(time), 4)) %>%
+  group_by(driver_name) %>% 
+  mutate(row_num = row_number())
+
+# Pct. based sectors
+quickest_lap %>% 
+  ungroup() %>% 
+  mutate(text_color = if_else(pct < .2 * max(pct) | pct > .8 * max(pct), "white", "black"),
+         sector = str_sub(sector, 2)) %>% 
+  ggplot(aes(x = reorder(sector, row_num), y = driver_name, fill = pct)) +
+  geom_tile(alpha=1, width = .9, height=.95) +
+  scale_fill_gradient2(low="blue", mid="white", high="red", midpoint = max(quickest_lap$pct)/2,
+                       labels=scales::percent) +
+  geom_text(aes(label = scales::number(time, accuracy = .0001), color = if_else(text_color=="white", "white", "black"))) +
+  scale_color_identity() +
+  theme(panel.background = element_blank()) +
+  labs(title="Fastest Lap Sector Times",
+       subtitle="Colored by Percent Above Quickest in Sector",
+       fill="",
+       caption="@staturdays",
+       x = "Sector") +
+  staturdays_theme +
+  theme(axis.title.y = element_blank())
 
 # Unvetted ----------------------------------------------------------------
 
