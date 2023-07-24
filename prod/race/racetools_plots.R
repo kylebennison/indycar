@@ -393,20 +393,9 @@ quickest_lap <- df %>%
   pivot_longer(cols = !driver_name, names_to = "sector", values_to = "time") %>% 
   group_by(sector) %>% 
   mutate(pct = round((time - min(time))/min(time), 4),
-         time = round(time - min(time), 4)) %>%
+         time_lost = round(time - min(time), 4)) %>%
   group_by(driver_name) %>% 
   mutate(row_num = row_number())
-
-# Time based sectors
-quickest_lap %>% 
-  ungroup() %>% 
-  mutate(text_color = if_else(time < .2 * max(time) | time > .8 * max(time), "white", "black")) %>% 
-  ggplot(aes(x = reorder(sector, row_num), y = driver_name, fill = time)) +
-  geom_tile(alpha=1, width = .9, height=.95) +
-  scale_fill_gradient2(low="blue", mid="white", high="red", midpoint = max(quickest_lap$time)/2) +
-  geom_text(aes(label = time, color = if_else(text_color=="white", "white", "black"))) +
-  scale_color_identity() +
-  theme(panel.background = element_blank())
 
 # Pct. based sectors
 quickest_lap %>% 
@@ -415,12 +404,12 @@ quickest_lap %>%
   ggplot(aes(x = reorder(sector, row_num), y = driver_name, fill = pct)) +
   geom_tile(alpha=1, width = .9, height=.95) +
   scale_fill_gradient2(low="blue", mid="white", high="red", midpoint = max(quickest_lap$pct)/2,
-                       labels=scales::percent, guide = "none") +
-  geom_text(aes(label = scales::percent(pct, accuracy = .01), color = if_else(text_color=="white", "white", "black"))) +
+                       labels=scales::percent) +
+  geom_text(aes(label = scales::number(time, accuracy = .0001), color = if_else(text_color=="white", "white", "black"))) +
   scale_color_identity() +
   theme(panel.background = element_blank()) +
-  labs(title="Sector Times",
-       subtitle = "Percent Above Quickest in Sector",
+  labs(title="Fastest Lap Sector Times",
+       subtitle="Colored by Percent Above Quickest in Sector",
        fill="",
        caption="@staturdays",
        x = "Sector") +
