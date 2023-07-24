@@ -400,7 +400,8 @@ quickest_lap <- df %>%
 # Pct. based sectors
 quickest_lap %>% 
   ungroup() %>% 
-  mutate(text_color = if_else(pct < .2 * max(pct) | pct > .8 * max(pct), "white", "black")) %>% 
+  mutate(text_color = if_else(pct < .2 * max(pct) | pct > .8 * max(pct), "white", "black"),
+         sector = str_sub(sector, 2)) %>% 
   ggplot(aes(x = reorder(sector, row_num), y = driver_name, fill = pct)) +
   geom_tile(alpha=1, width = .9, height=.95) +
   scale_fill_gradient2(low="blue", mid="white", high="red", midpoint = max(quickest_lap$pct)/2,
