@@ -1,6 +1,6 @@
 Package: indycar
 Title: Get and Analyze Indycar Data
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: 
     person("Kyle", "Bennison", , "kyle@staturdays.com", role = c("aut", "cre"))
 Description: Clean, process, and analyze Indycar data.
