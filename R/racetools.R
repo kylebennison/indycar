@@ -6,12 +6,10 @@
 #'
 #' This function will prompt you several times for which race you are interested in.
 #'
-#' @param root_url
+#' @param root_url the base url to do the search for. Defaults to the current season in Indycar on racetools.com
 #'
-#' @return
+#' @return str: the url of the session of interest
 #' @export
-#'
-#' @examples
 get_url <- function(root_url="https://racetools.com/logfiles/IndyCar/2023/"){
 
   res <- readLines(root_url)
@@ -60,8 +58,6 @@ get_url <- function(root_url="https://racetools.com/logfiles/IndyCar/2023/"){
 #'
 #' @return dataframe
 #' @export
-#'
-#' @examples
 get_data <- function(event, session, root_url="https://racetools.com/logfiles/IndyCar/2023/"){
 
   res <- readLines(root_url)

@@ -4,10 +4,9 @@
 #'
 #' @param url A url to a zip file (ideally from racetools.com)
 #'
-#' @return tibble
+#' @return a tibble of laps data
 #' @export
 #'
-#' @examples
 load_data <- function(url){
 
   # Create a tempfile
@@ -36,7 +35,7 @@ load_data <- function(url){
 #' @export
 #'
 #' @examples
-#' get_fastest(df = df, drivers = c("Palou", "O'Ward"))
+#' get_fastest(df = laps, drivers = c("Grosjean", "O'Ward"))
 get_fastest <- function(df, drivers=unique(df$driver_name)){
   return(df %>%
            dplyr::filter(driver_name %in% drivers) %>%
@@ -60,14 +59,15 @@ get_fastest <- function(df, drivers=unique(df$driver_name)){
 #' - number of stops
 #' - number of positions gained/lost and overtakes
 #'
-#' @param df
+#' @param df a laps dataframe
 #' @param traffic_gap double (optional): gap in seconds inside of which driver is
 #' defined as being in traffic
 #'
-#' @return
+#' @return tibble
 #' @export
 #'
 #' @examples
+#' processed_df <- laps %>% preprocess_laps()
 preprocess_laps <- function(df, traffic_gap = .75){
   colnames(df) <- janitor::make_clean_names(colnames(df))
 
@@ -80,7 +80,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
 
   # Pivot back
   df_cum <- sectors %>%
-    pivot_wider(id_cols = c(driver_name, lap),
+    tidyr::pivot_wider(id_cols = c(driver_name, lap),
                 names_from = sector,
                 values_from = cum_sector_time,
                 names_glue = "{sector}_cum")
@@ -89,7 +89,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
   # NOTE: Last sector is the s/f line, so cum sum time equals full lap time
   # Join back
   df <- df %>%
-    left_join(df_cum, by = c("driver_name", "lap"))
+    dplyr::left_join(df_cum, by = c("driver_name", "lap"))
 
   # calc position at end of lap
   df <- df %>%
@@ -110,7 +110,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
     dplyr::mutate(gap_to_leader = leader_tod - tod,
            gap_to_next = next_tod - tod,
     ) %>%
-    ungroup() %>%
+    dplyr::ungroup() %>%
     dplyr::mutate(
       car_ahead_tod = dplyr::lag(tod, 1L, order_by = tod),
       car_behind_tod = dplyr::lead(tod, 1L, order_by = tod),
@@ -121,7 +121,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
   # Track Status Update
   df <- df %>%
     dplyr::group_by(driver_name) %>%
-    dplyr::mutate(status_desc = case_when(
+    dplyr::mutate(status_desc = dplyr::case_when(
       status == "P" ~ "Pit In",
       dplyr::lag(status, 1L, order_by = lap) == "P" ~ "Pit Out",
       status == "Y" ~ "Yellow",
@@ -129,7 +129,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
       status == "" & dplyr::lag(status, 2L, order_by = lap) == "Y" ~ "Restart",  # This is the first full lap back under green
       TRUE ~ status
     )) %>%
-    dplyr::mutate(is_yellow = if_else(str_detect(status_desc, "Yellow|Y"), 1, 0))
+    dplyr::mutate(is_yellow = dplyr::if_else(stringr::str_detect(status_desc, "Yellow|Y"), 1, 0))
 
   # Tire Stint
   df <- df %>%
@@ -140,7 +140,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
   # tire life
   df <- df %>%
     dplyr::group_by(driver_name, tire_stint) %>%
-    dplyr::mutate(tire_life = row_number())
+    dplyr::mutate(tire_life = dplyr::row_number())
 
   # Define traffic
   # Traffic is being close to the car ahead (usually multiple cars)
@@ -151,7 +151,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
   df <- df %>%
     dplyr::group_by(driver_name) %>%
     dplyr::mutate(
-      in_traffic = if_else(
+      in_traffic = dplyr::if_else(
         gap_to_car_ahead > -traffic_gap  # close to car ahead
         & dplyr::lag(pos, 1L, order_by = lap) == pos,  # Not improving position
         1,
@@ -159,7 +159,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
       ),
       # NOTE: This does not account for being held up by lap traffic, only people ahead
       # in position
-      was_held_up = if_else(
+      was_held_up = dplyr::if_else(
         dplyr::lag(in_traffic, 1L, order_by = lap) == 1  # in traffic prev. lap
         & dplyr::lag(lap_time, 1L, order_by = lap) > lap_time  # lap time improved
         & dplyr::lag(pos, 1L, order_by = lap) > pos,  # advanced position (passed traffic)
@@ -172,7 +172,7 @@ preprocess_laps <- function(df, traffic_gap = .75){
   df <- df %>%
     dplyr::group_by(driver_name) %>%
     dplyr::mutate(pos_gained = dplyr::lag(pos, n = 1L, order_by = lap) - pos,
-           overtakes = if_else(pos_gained > 0, pos_gained, 0))
+           overtakes = dplyr::if_else(pos_gained > 0, pos_gained, 0))
 
   return(df)
 }
@@ -183,17 +183,17 @@ preprocess_sectors <- function(df){
   sectors <- df %>%
     dplyr::group_by(driver_name) %>%
     dplyr::mutate(lap_start_tod = dplyr::lag(tod, n=1L, order_by=lap)) %>%
-    dplyr::mutate(lap_start_tod = if_else(
+    dplyr::mutate(lap_start_tod = dplyr::if_else(
       lap == 1,
       tod - lap_time,
       lap_start_tod)) %>%  # first lap start time is calculated by subtracting lap 1 lap time from lap 1 finish TOD
-    pivot_longer(cols = matches("s[0-9]+"), names_to = "sector", values_to = "sector_time")
+    tidyr::pivot_longer(cols = matches("s[0-9]+"), names_to = "sector", values_to = "sector_time")
 
   # NA missing sector times
   sectors <- sectors %>%
     dplyr::group_by(driver_name, lap) %>%
     dplyr::mutate(missing_sectors = sum(sector_time == 0)) %>%
-    dplyr::mutate(sector_time = if_else(
+    dplyr::mutate(sector_time = dplyr::if_else(
       sector_time == 0 & missing_sectors > 0,
       NA,
       sector_time
@@ -215,12 +215,12 @@ preprocess_sectors <- function(df){
   sectors <- sectors %>%
     dplyr::group_by(sector) %>%
     dplyr::mutate(
-      car_ahead_s = if_else(
+      car_ahead_s = dplyr::if_else(
         is.na(sector_complete_tod),
         NA,
         dplyr::lag(sector_complete_tod, n = 1L, order_by = sector_complete_tod) - sector_complete_tod
       ),
-      driver_ahead = if_else(
+      driver_ahead = dplyr::if_else(
         is.na(sector_complete_tod),
         NA,
         dplyr::lag(driver_name, n = 1L, order_by = sector_complete_tod)
@@ -229,7 +229,7 @@ preprocess_sectors <- function(df){
 
   # This should be running order instead of position
   sectors %>%
-    arrange(sector, sector_complete_tod)
+    dplyr::arrange(sector, sector_complete_tod)
 
   # TODO: Create mini-laps and get running order for all non-NA mini-laps, then calc overtakes
 
@@ -240,12 +240,13 @@ preprocess_sectors <- function(df){
 #'
 #' Filters out yellow flag laps.
 #'
-#' @param df
+#' @param df a laps df
 #'
-#' @return
+#' @return tibble
 #' @export
 #'
 #' @examples
+#' no_yellows <- laps %>% filter_yellow()
 filter_yellow <- function(df){
   return(df %>%
     dplyr::filter(is_yellow == 0))
@@ -257,13 +258,14 @@ filter_yellow <- function(df){
 #' Filters laps slower than designated race pace (defaults to 107% of fastest
 #' lap time).
 #'
-#' @param df
-#' @param race_pace
+#' @param df a laps df
+#' @param race_pace (double): percentage over fastest lap to filter out. Defaults to 1.07 (107%).
 #'
-#' @return
+#' @return a tibble
 #' @export
 #'
 #' @examples
+#' fast_laps <- laps %>% filter_slow(race_pace=1.1)
 filter_slow <- function(df, race_pace = 1.07){
   return(df %>%
            dplyr::filter(lap_time <= min(df$lap_time) * race_pace))
@@ -271,13 +273,32 @@ filter_slow <- function(df, race_pace = 1.07){
 
 #' Filter Out Pit In and Pit Out Laps
 #'
-#' @param df
+#' @param df a laps df
 #'
-#' @return
+#' @return tibble
 #' @export
 #'
 #' @examples
+#' no_pits <- laps %>% filter_pits()
 filter_pits <- function(df){
   return(df %>%
            dplyr::filter(!status_desc %in% c("Pit In", "Pit Out")))
+}
+
+
+get_field_green_lap_time <- function(df){
+
+  green_lap_time <- df %>%
+    filter_yellow() %>%
+    filter_pits() %>%
+    filter_slow(race_pace = 1.25) %>%
+    pull(lap_time) %>%
+    mean()
+
+  return(green_lap_time)
+}
+
+get_top_n_drivers <- function(df, n=3){
+  df %>%
+    dplyr::filter(lap == max(lap) & pos <= n) %>% dplyr::pull(driver_name)
 }
