@@ -16,5 +16,5 @@ tibble
 Filter Out Pit In and Pit Out Laps
 }
 \examples{
-no_pits <- laps \%>\% filter_pits()
+no_pits <- laps \%>\% preprocess_laps() \%>\%  filter_pits()
 }

@@ -19,5 +19,5 @@ Filters laps slower than designated race pace (defaults to 107\% of fastest
 lap time).
 }
 \examples{
-fast_laps <- laps \%>\% filter_slow(race_pace=1.1)
+fast_laps <- laps \%>\% preprocess_laps() \%>\%  filter_slow(race_pace=1.1)
 }

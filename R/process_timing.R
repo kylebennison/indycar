@@ -7,7 +7,7 @@
 #' @export
 #'
 #' @examples
-#' get_fastest(df = laps, drivers = c("Grosjean", "O'Ward"))
+#' get_fastest(df = laps %>% preprocess_laps(), drivers = c("Grosjean", "O'Ward"))
 get_fastest <- function(df, drivers=unique(df$driver_name)){
   return(df %>%
            dplyr::filter(driver_name %in% drivers) %>%
@@ -111,6 +111,11 @@ preprocess_laps <- function(df, traffic_gap = .75){
     dplyr::mutate(n_stops = cumsum(status == "P" | status == "YP"),
            tire_stint = cumsum(status_desc == "Pit Out" | status_desc == "Yellow Pit Out") + 1)
 
+  # Is Pit and pit_number
+  df <- df %>%
+    dplyr::group_by(driver_name) %>%
+    dplyr::mutate(is_pit = dplyr::if_else(stringr::str_detect(status_desc, "Pit"), 1, 0))
+
   # tire life
   df <- df %>%
     dplyr::group_by(driver_name, tire_stint) %>%
@@ -147,6 +152,8 @@ preprocess_laps <- function(df, traffic_gap = .75){
     dplyr::group_by(driver_name) %>%
     dplyr::mutate(pos_gained = dplyr::lag(pos, n = 1L, order_by = lap) - pos,
            overtakes = dplyr::if_else(pos_gained > 0, pos_gained, 0))
+
+  df <- df %>% add_manufacturer()
 
   return(df)
 }
@@ -221,7 +228,7 @@ preprocess_sectors <- function(df){
 #' @export
 #'
 #' @examples
-#' no_yellows <- laps %>% filter_yellow()
+#' no_yellows <- laps %>% preprocess_laps() %>% filter_yellow()
 filter_yellow <- function(df, keep_yellows=FALSE){
   if(keep_yellows){
     keep <- 1
@@ -245,7 +252,7 @@ filter_yellow <- function(df, keep_yellows=FALSE){
 #' @export
 #'
 #' @examples
-#' fast_laps <- laps %>% filter_slow(race_pace=1.1)
+#' fast_laps <- laps %>% preprocess_laps() %>%  filter_slow(race_pace=1.1)
 filter_slow <- function(df, race_pace = 1.07){
   return(df %>%
            dplyr::filter(lap_time <= min(df$lap_time) * race_pace))
@@ -259,7 +266,7 @@ filter_slow <- function(df, race_pace = 1.07){
 #' @export
 #'
 #' @examples
-#' no_pits <- laps %>% filter_pits()
+#' no_pits <- laps %>% preprocess_laps() %>%  filter_pits()
 filter_pits <- function(df){
   return(df %>%
            dplyr::filter(!stringr::str_detect(status_desc, "Pit")))
@@ -292,4 +299,16 @@ get_field_yellow_lap_time <- function(df){
 get_top_n_drivers <- function(df, n=3){
   df %>%
     dplyr::filter(lap == max(lap) & pos <= n) %>% dplyr::pull(driver_name)
+}
+
+
+#' Add field for manufacturers
+#'
+#' @param df a laps df
+#'
+#' @return a tibble
+add_manufacturer <- function(df){
+  return(df %>%
+    dplyr::mutate(manufacturer = team_manufacturers[driver_teams[driver_name]])
+  )
 }

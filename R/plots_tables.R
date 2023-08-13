@@ -1,3 +1,8 @@
+#' List of teams and colors
+#'
+#' @description
+#' Team names and primary car colors
+#'
 #' @export
 team_colors <- c(
   "Juncos" = "#11bf4e",
@@ -12,6 +17,11 @@ team_colors <- c(
   "Foyt" = "#525252"
 )
 
+#' List of teams and enging manufacturers
+#'
+#' @description
+#' Team name and engine manufacturer name.
+#'
 #' @export
 team_manufacturers <- c(
   "Juncos" = "Chevy",
@@ -26,42 +36,25 @@ team_manufacturers <- c(
   "Foyt" = "Chevy"
 )
 
+#' Get Team Colors For a Given Team
+#'
+#' @param team_name (str): team name
+#'
+#' @description
+#' Gets a team's primary colors from a team name
+#'
+#' @return (character): hex color of team
+#'
 #' @export
 get_team_colors <- function(team_name){
   return(team_colors[team_name] %>% as.character())
 }
 
-#' @export
-driver_colors <- c(
-  "Rossi" = get_team_colors("McLaren"),
-  "Dixon" = get_team_colors("Ganassi"),
-  "Herta" = get_team_colors("Andretti"),
-  "Palou" = get_team_colors("Ganassi"),
-  "Power" = get_team_colors("Penske"),
-  "McLaughlin" = get_team_colors("Penske"),
-  "Newgarden" = get_team_colors("Penske"),
-  "Kirkwood" = get_team_colors("Andretti"),
-  "O'Ward" = get_team_colors("McLaren"),
-  "Ilott" = get_team_colors("Juncos"),
-  "Lundgaard" = get_team_colors("Rahal"),
-  "Armstrong" = get_team_colors("Ganassi"),
-  "Rahal" = get_team_colors("Rahal"),
-  "Castroneves" = get_team_colors("Meyer Shank"),
-  "Pagenaud" = get_team_colors("Meyer Shank"),
-  "Rosenqvist" = get_team_colors("McLaren"),
-  "DeFrancesco" = get_team_colors("Andretti"),
-  "Grosjean" = get_team_colors("Andretti"),
-  "Malukas" = get_team_colors("Dale Coyne"),
-  "Ericsson" = get_team_colors("Ganassi"),
-  "Pedersen" = get_team_colors("Foyt"),
-  "VeeKay" = get_team_colors("Ed Carpenter"),
-  "Canapino" = get_team_colors("Juncos"),
-  "Harvey" = get_team_colors("Rahal"),
-  "Lundqvist" = get_team_colors("Meyer Shank"),
-  "Hunter-Reay" = get_team_colors("Ed Carpenter"),
-  "Ray Robb" = get_team_colors("Dale Coyne")
-)
-
+#' List of drivers and teams
+#'
+#' @description
+#' Driver last name and team name
+#'
 #' @export
 driver_teams <- c(
   "Rossi" = "McLaren",
@@ -90,9 +83,20 @@ driver_teams <- c(
   "Harvey" = "Rahal",
   "Lundqvist" = "Meyer Shank",
   "Hunter-Reay" = "Ed Carpenter",
-  "Ray Robb" = "Dale Coyne"
+  "Ray Robb" = "Dale Coyne",
+  "Ferrucci" = "Foyt"
 )
 
+
+#' Get list of driver names and team colors
+#'
+#' @return list
+#' @export
+get_driver_colors <- function(){
+  driver_colors <- c(team_colors[driver_teams])
+  names(driver_colors) <- names(driver_teams)
+  return(driver_colors)
+}
 
 
 # Plots -------------------------------------------------------------------
@@ -142,7 +146,7 @@ plot_lap_times <- function(df, drivers){
     filter_slow() %>%
     ggplot2::ggplot(ggplot2::aes(x=lap, y=lap_time, color=driver_name)) +
     ggplot2::geom_line(size=2,alpha=.5) +
-    statRdaysCFB::staturdays_theme +
+    indycar_theme +
     ggplot2::theme(panel.grid.major = ggplot2::element_line(color = "grey90"),
           plot.caption.position = "plot") +
     ggplot2::labs(color = "Driver", x = "Lap", y = "Time (s)", caption = "Green non-pit laps only")
@@ -157,10 +161,10 @@ plot_laps_boxplot <- function(df){
     dplyr::mutate(median_lap = median(lap_time)) %>%
     ggplot2::ggplot(ggplot2::aes(x=lap_time, y=reorder(driver_name, desc(median_lap)))) +
     ggplot2::geom_boxplot(ggplot2::aes(fill=driver_name), alpha = .7) +
-    staturdays_theme +
+    indycar_theme +
     ggplot2::labs(x = "Lap Time",
          y = "") +
-    ggplot2::scale_fill_manual(values = driver_colors, guide="none")
+    ggplot2::scale_fill_manual(values = get_driver_colors(), guide="none")
 }
 
 # Pit Delta
@@ -227,7 +231,7 @@ plot_tire_life <- function(df) {
     dplyr::summarise(lap_time = mean(lap_time)) %>%
     ggplot2::ggplot(ggplot2::aes(x=tire_life, y=lap_time, color=tire)) +
     ggplot2::geom_line(size=2, alpha=.7) +
-    statRdaysCFB::staturdays_theme +
+    indycar_theme +
     ggplot2::theme(
       panel.grid.major = ggplot2::element_line(color = "grey90"),
       plot.caption.position = "plot") +
@@ -343,7 +347,7 @@ plot_sector_quickest_heatmap <- function(df){
                   fill="",
                   caption="@staturdays",
                   x = "Sector") +
-    statRdaysCFB::staturdays_theme +
+    indycar_theme +
     ggplot2::theme(axis.title.y = ggplot2::element_blank())
 
 }

@@ -7,16 +7,16 @@
 \format{
 \subsection{\code{laps}}{
 
-A data frame with 21 rows and 21 columns:
+A data frame with 2262 rows and 23 columns:
 }
 }
 \source{
-\url{https://racetools.com/logfiles/IndyCar/2023/Gallagher\%20Grand\%20Prix(Indianapolis\%20Motor\%20Speedway\%20RC)-Qualifications\%20-\%20Segment\%203\%20_\%20Firestone\%20Fast\%206_(Q4.I)_2023-08-11.zip}
+\url{https://racetools.com/logfiles/IndyCar/2023/Gallagher\%20Grand\%20Prix(Indianapolis\%20Motor\%20Speedway\%20RC)-Race_(R.I)_2023-08-12.zip}
 }
 \usage{
 laps
 }
 \description{
-A dataframe of qualifying laps from the fast 6 of the 2023 Indianopolis Road Course GP.
+A dataframe of race laps from 2023 Indianapolis Road Course GP.
 }
 \keyword{datasets}

@@ -4,10 +4,12 @@
 \alias{filter_yellow}
 \title{Filter Out Yellow Flag Laps}
 \usage{
-filter_yellow(df)
+filter_yellow(df, keep_yellows = FALSE)
 }
 \arguments{
 \item{df}{a laps df}
+
+\item{keep_yellows}{(bool): whether to return only the yellow laps. Defaults to False.}
 }
 \value{
 tibble
@@ -16,5 +18,5 @@ tibble
 Filters out yellow flag laps.
 }
 \examples{
-no_yellows <- laps \%>\% filter_yellow()
+no_yellows <- laps \%>\% preprocess_laps() \%>\% filter_yellow()
 }

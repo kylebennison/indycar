@@ -18,5 +18,5 @@ a dataframe
 Get the fastest lap for a list of drivers
 }
 \examples{
-get_fastest(df = laps, drivers = c("Grosjean", "O'Ward"))
+get_fastest(df = laps \%>\% preprocess_laps(), drivers = c("Grosjean", "O'Ward"))
 }
