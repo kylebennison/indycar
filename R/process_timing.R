@@ -1,31 +1,3 @@
-#' Load Data from racetools.com
-#'
-#' Loads a zip file from the internet, unzips it, and returns it as a tibble dataframe.
-#'
-#' @param url A url to a zip file (ideally from racetools.com)
-#'
-#' @return a tibble of laps data
-#' @export
-#'
-load_data <- function(url){
-
-  # Create a tempfile
-  temp <- tempfile()
-
-  # Download from URL
-  download.file(url, temp)
-  # Unzip to tmp/ folder
-  unzip(temp, exdir = "tmp/")
-  fname <- list.files("tmp", pattern = ".csv")
-  df <- data.table::fread(glue::glue("tmp/{fname}"))
-  # Remove temp and tmp folders and files
-  unlink(temp)
-  unlink("tmp", recursive = TRUE)
-
-  return(tibble::as_tibble(df))
-}
-
-
 #' Get the fastest lap for a list of drivers
 #'
 #' @param df A dataframe of laptimes and drivers

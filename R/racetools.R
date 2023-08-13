@@ -1,3 +1,82 @@
+cache_name <- function(){
+  paste0(dirname(tempdir()), "/indycar")
+}
+
+#' Create cache folder for faster loading of data
+#'
+#' @return None
+#' @export
+enable_cache <- function(){
+  newdir <- paste0(dirname(tempdir()), "/indycar")
+  dir.create(newdir)
+  message(glue::glue("New cache directory created at {newdir}"))
+}
+
+
+#' Save file as an RDS to indycar cache
+#'
+#' @param df a tibble
+#' @param filename the name of the file (should match the original name of the file read in)
+#'
+#' @return None
+save_to_cache <- function(df, filename){
+  if(!dir.exists(cache_name())){
+    enable_cache()
+  }
+  filename <- paste0(cache_name(), "/", filename)
+  saveRDS(df, file=filename)
+  message(glue::glue("Saved copy to cache at {filename}"))
+  return(filename)
+}
+
+
+#' Load Data from racetools.com
+#'
+#' Loads a zip file from the internet, unzips it, and returns it as a tibble dataframe.
+#'
+#' @param url A url to a zip file (ideally from racetools.com)
+#'
+#' @return a tibble of laps data
+#' @export
+#'
+load_data <- function(url){
+
+  # Formulate what the resulting filename will be
+  spaces <- gsub("%20", " ", basename(url))
+  parens <- gsub("\\([a-zA-Z0-9 \\.]+\\)", "", spaces)
+  scores <- gsub("__", "_", parens)
+  fname_rds <- gsub("zip", "rds", scores)
+
+  out <- tryCatch({
+    expected_loc <- paste0(cache_name(), "/", fname_rds)
+    message(glue::glue("Searching cache at {expected_loc}..."))
+    df <- readRDS(expected_loc)
+    message("Success")
+  },
+  warning=function(cond){
+    message("Couldn't find cached file. Loading from url...")
+    # Create a tempfile
+    temp <- tempfile()
+
+    # Download from URL
+    download.file(url, temp)
+    # Unzip to tmp/ folder
+    unzip(temp, exdir = "tmp/")
+    fname <- list.files("tmp", pattern = ".csv")
+    df <- data.table::fread(glue::glue("tmp/{fname}"))
+    # Save to cache as an RDS
+    save_to_cache(tibble::as_tibble(df), fname_rds)
+    # Remove temp and tmp folders and files
+    unlink(temp)
+    unlink("tmp", recursive = TRUE)
+
+    return(tibble::as_tibble(df))
+  })
+
+  return(df)
+
+}
+
 # Get Racetools Data
 # TODO:
 # Add another func for non-interactive downloads. Just call it get_data().
