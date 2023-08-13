@@ -96,7 +96,9 @@ preprocess_laps <- function(df, traffic_gap = .75){
     dplyr::mutate(status_desc = dplyr::case_when(
       status == "P" ~ "Pit In",
       dplyr::lag(status, 1L, order_by = lap) == "P" ~ "Pit Out",
+      dplyr::lag(status, 1L, order_by = lap) == "YP" ~ "Yellow Pit Out",
       status == "Y" ~ "Yellow",
+      status == "YP" ~ "Yellow Pit In",
       status == "" & dplyr::lag(status, 1L, order_by = lap) == "Y" ~ "Yellow Ending",  # The end of this lap the green flag flies
       status == "" & dplyr::lag(status, 2L, order_by = lap) == "Y" ~ "Restart",  # This is the first full lap back under green
       TRUE ~ status
@@ -106,8 +108,8 @@ preprocess_laps <- function(df, traffic_gap = .75){
   # Tire Stint
   df <- df %>%
     dplyr::group_by(driver_name) %>%
-    dplyr::mutate(n_stops = cumsum(status == "P"),
-           tire_stint = cumsum(status_desc == "Pit Out") + 1)
+    dplyr::mutate(n_stops = cumsum(status == "P" | status == "YP"),
+           tire_stint = cumsum(status_desc == "Pit Out" | status_desc == "Yellow Pit Out") + 1)
 
   # tire life
   df <- df %>%
@@ -213,15 +215,21 @@ preprocess_sectors <- function(df){
 #' Filters out yellow flag laps.
 #'
 #' @param df a laps df
+#' @param keep_yellows (bool): whether to return only the yellow laps. Defaults to False.
 #'
 #' @return tibble
 #' @export
 #'
 #' @examples
 #' no_yellows <- laps %>% filter_yellow()
-filter_yellow <- function(df){
+filter_yellow <- function(df, keep_yellows=FALSE){
+  if(keep_yellows){
+    keep <- 1
+  } else{
+    keep <- 0
+  }
   return(df %>%
-    dplyr::filter(is_yellow == 0))
+    dplyr::filter(is_yellow == keep))
 }
 
 
@@ -254,7 +262,7 @@ filter_slow <- function(df, race_pace = 1.07){
 #' no_pits <- laps %>% filter_pits()
 filter_pits <- function(df){
   return(df %>%
-           dplyr::filter(!status_desc %in% c("Pit In", "Pit Out")))
+           dplyr::filter(!stringr::str_detect(status_desc, "Pit")))
 }
 
 
@@ -268,6 +276,17 @@ get_field_green_lap_time <- function(df){
     mean()
 
   return(green_lap_time)
+}
+
+
+get_field_yellow_lap_time <- function(df){
+
+  yellow_lap_time <- df %>%
+    filter_yellow(keep_yellows=TRUE) %>%
+    pull(lap_time) %>%
+    mean()
+
+  return(yellow_lap_time)
 }
 
 get_top_n_drivers <- function(df, n=3){

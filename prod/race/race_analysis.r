@@ -7,3 +7,5 @@ df <- load_data("https://racetools.com/logfiles/IndyCar/2023/Gallagher%20Grand%2
 df <- preprocess_laps(df)
 df %>% plot_laps_boxplot()
 df %>% plot_sector_quickest_heatmap()
+df %>% plot_lap_times(drivers = c("Rahal", "Dixon"))
+df %>% table_pit_delta()

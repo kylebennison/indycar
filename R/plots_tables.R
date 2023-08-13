@@ -13,6 +13,20 @@ team_colors <- c(
 )
 
 #' @export
+team_manufacturers <- c(
+  "Juncos" = "Chevy",
+  "McLaren" = "Chevy",
+  "Meyer Shank" = "Honda",
+  "Ed Carpenter" = "Chevy",
+  "Rahal" = "Honda",
+  "Penske" = "Chevy",
+  "Andretti" = "Honda",
+  "Dale Coyne" = "Honda",
+  "Ganassi" = "Honda",
+  "Foyt" = "Chevy"
+)
+
+#' @export
 get_team_colors <- function(team_name){
   return(team_colors[team_name] %>% as.character())
 }
@@ -46,6 +60,37 @@ driver_colors <- c(
   "Lundqvist" = get_team_colors("Meyer Shank"),
   "Hunter-Reay" = get_team_colors("Ed Carpenter"),
   "Ray Robb" = get_team_colors("Dale Coyne")
+)
+
+#' @export
+driver_teams <- c(
+  "Rossi" = "McLaren",
+  "Dixon" = "Ganassi",
+  "Herta" = "Andretti",
+  "Palou" = "Ganassi",
+  "Power" = "Penske",
+  "McLaughlin" = "Penske",
+  "Newgarden" = "Penske",
+  "Kirkwood" = "Andretti",
+  "O'Ward" = "McLaren",
+  "Ilott" = "Juncos",
+  "Lundgaard" = "Rahal",
+  "Armstrong" = "Ganassi",
+  "Rahal" = "Rahal",
+  "Castroneves" = "Meyer Shank",
+  "Pagenaud" = "Meyer Shank",
+  "Rosenqvist" = "McLaren",
+  "DeFrancesco" = "Andretti",
+  "Grosjean" = "Andretti",
+  "Malukas" = "Dale Coyne",
+  "Ericsson" = "Ganassi",
+  "Pedersen" = "Foyt",
+  "VeeKay" = "Ed Carpenter",
+  "Canapino" = "Juncos",
+  "Harvey" = "Rahal",
+  "Lundqvist" = "Meyer Shank",
+  "Hunter-Reay" = "Ed Carpenter",
+  "Ray Robb" = "Dale Coyne"
 )
 
 
@@ -119,22 +164,31 @@ plot_laps_boxplot <- function(df){
 }
 
 # Pit Delta
-# TODO: Generalize (make a function)
+# TODO: If under yellow, compare delta to yellow lap time
 table_pit_delta <- function(df){
 
   green_lap_time <- df %>%
     get_field_green_lap_time()
 
+  yellow_lap_time <- df %>%
+    get_field_yellow_lap_time()
+
+
   df %>%
     dplyr::group_by(driver_name) %>%
-    dplyr::filter(status == "P" | (lag(status, 1L, order_by = lap) == "P")) %>%
-    dplyr::mutate(pit_delta = lap_time - green_lap_time) %>%
-    dplyr::mutate(pit_stop = (dplyr::row_number() + 1) %/%2) %>%
+    dplyr::filter(stringr::str_detect(status_desc, "Pit")) %>%
+    dplyr::mutate(pit_delta = if_else(is_yellow == 1,
+                                      lap_time - yellow_lap_time,
+                                      lap_time - green_lap_time)) %>%
+    dplyr::mutate(pit_stop = (dplyr::row_number() + 1) %/% 2) %>%
     dplyr::group_by(driver_name, pit_stop) %>%
     dplyr::summarise(total_pit_delta = sum(pit_delta)) %>%
     gt::gt() %>%
     gt::tab_header(title = "Pit Stop Delta", subtitle = "Time Lost Over Avg. Green Flag Lap (s)") %>%
-    gt::cols_label_with(fn = function(x) (janitor::make_clean_names(x, case = "title"))) %>%
+    gt::cols_label_with(
+      fn = function(x)
+        (janitor::make_clean_names(x, case = "title"))
+    ) %>%
     gt::fmt_auto()
 }
 
@@ -263,32 +317,32 @@ plot_sector_quickest_heatmap <- function(df){
     get_fastest() %>%
     dplyr::ungroup() %>%
     filter_slow() %>%
-    dplyr::select(driver_name, matches("s[0-9]+")) %>%
+    dplyr::select(driver_name, lap_time, matches("s[0-9]+")) %>%
     dplyr::select(!matches("cum")) %>%
-    tidyr::pivot_longer(cols = !driver_name, names_to = "sector", values_to = "time") %>%
+    tidyr::pivot_longer(cols = !c(driver_name, lap_time), names_to = "sector", values_to = "time") %>%
     dplyr::group_by(sector) %>%
     dplyr::mutate(pct = round((time - min(time))/min(time), 4),
-           time_lost = round(time - min(time), 4)) %>%
-    dplyr::group_by(driver_name) %>%
+                  time_lost = round(time - min(time), 4)) %>%
+    dplyr::group_by(driver_name, lap_time) %>%
     dplyr::mutate(row_num = dplyr::row_number())
 
   # Pct. based sectors
   quickest_lap %>%
     dplyr::ungroup() %>%
     dplyr::mutate(text_color = dplyr::if_else(pct < .2 * max(pct) | pct > .8 * max(pct), "white", "black"),
-           sector = stringr::str_sub(sector, 2)) %>%
-    ggplot2::ggplot(ggplot2::aes(x = reorder(sector, row_num), y = driver_name, fill = pct)) +
+                  sector = stringr::str_sub(sector, 2)) %>%
+    ggplot2::ggplot(ggplot2::aes(x = reorder(sector, row_num), y = reorder(driver_name, desc(lap_time)), fill = pct)) +
     ggplot2::geom_tile(alpha=1, width = .9, height=.95) +
     ggplot2::scale_fill_gradient2(low="blue", mid="white", high="red", midpoint = max(quickest_lap$pct)/2,
-                         labels=scales::percent) +
+                                  labels=scales::percent) +
     ggplot2::geom_text(ggplot2::aes(label = scales::number(time, accuracy = .0001), color = dplyr::if_else(text_color=="white", "white", "black"))) +
     ggplot2::scale_color_identity() +
     ggplot2::theme(panel.background = ggplot2::element_blank()) +
     ggplot2::labs(title="Fastest Lap Sector Times",
-         subtitle="Colored by Percent Above Quickest in Sector",
-         fill="",
-         caption="@staturdays",
-         x = "Sector") +
+                  subtitle="Colored by Percent Above Quickest in Sector",
+                  fill="",
+                  caption="@staturdays",
+                  x = "Sector") +
     statRdaysCFB::staturdays_theme +
     ggplot2::theme(axis.title.y = ggplot2::element_blank())
 
